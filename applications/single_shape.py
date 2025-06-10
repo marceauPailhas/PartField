@@ -609,7 +609,7 @@ def load_features(feature_filename, mesh_filename, viz_mode):
         'F' : F, 
         'pca_colors' : pca_colors, 
         'feat_np' : feat,
-        'feat_pt' : torch.tensor(feat, device='cuda'),
+        'feat_pt' : torch.tensor(feat, device='cpu'),
         'trimesh' : tm,
         'label' : None,
         'num_cluster' : 1,
@@ -755,4 +755,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

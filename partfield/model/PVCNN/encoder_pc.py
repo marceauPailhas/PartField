@@ -125,7 +125,7 @@ class TriPlanePC2Encoder(torch.nn.Module):
     def __init__(
             self,
             cfg,
-            device='cuda',
+            device='cpu',
             shape_min=-1.0,
             shape_length=2.0,
             use_2d_feat=False,

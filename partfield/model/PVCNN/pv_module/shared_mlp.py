@@ -4,7 +4,7 @@ __all__ = ['SharedMLP']
 
 
 class SharedMLP(nn.Module):
-    def __init__(self, in_channels, out_channels, dim=1, device='cuda'):
+    def __init__(self, in_channels, out_channels, dim=1, device='cpu'):
         super().__init__()
         # print('==> SharedMLP device: ', device)
         if dim == 1:

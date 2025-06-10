@@ -7,7 +7,7 @@ from .pv_module import SharedMLP, PVConv
 
 def create_pointnet_components(
         blocks, in_channels, with_se=False, normalize=True, eps=0,
-        width_multiplier=1, voxel_resolution_multiplier=1, scale_pvcnn=False, device='cuda'):
+        width_multiplier=1, voxel_resolution_multiplier=1, scale_pvcnn=False, device='cpu'):
     r, vr = width_multiplier, voxel_resolution_multiplier
     layers, concat_channels = [], 0
     for out_channels, num_blocks, voxel_resolution in blocks:
@@ -26,7 +26,7 @@ def create_pointnet_components(
 
 class PCMerger(nn.Module):
 # merge surface sampled PC and rendering backprojected PC (w/ 2D features):
-    def __init__(self, in_channels=204, device="cuda"):
+    def __init__(self, in_channels=204, device="cpu"):
         super(PCMerger, self).__init__()
         self.mlp_normal = SharedMLP(3, [128, 128], device=device)
         self.mlp_rgb = SharedMLP(3, [128, 128], device=device)
@@ -51,7 +51,7 @@ class PCMerger(nn.Module):
 
 
 class PVCNNEncoder(nn.Module):
-    def __init__(self, pvcnn_feat_dim, device='cuda', in_channels=3, use_2d_feat=False):
+    def __init__(self, pvcnn_feat_dim, device='cpu', in_channels=3, use_2d_feat=False):
         super(PVCNNEncoder, self).__init__()
         self.device = device
         self.blocks = ((pvcnn_feat_dim, 1, 32), (128, 2, 16), (256, 1, 8))

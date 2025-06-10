@@ -1,6 +1,5 @@
 from partfield.config import default_argument_parser, setup
 from lightning.pytorch import seed_everything, Trainer
-from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning
 import torch
@@ -27,10 +26,9 @@ def predict(cfg):
         verbose=True
     )]
 
-    trainer = Trainer(devices=-1,
-                      accelerator="gpu",
-                      precision="16-mixed",
-                      strategy=DDPStrategy(find_unused_parameters=True),
+    trainer = Trainer(devices=1,
+                      accelerator="cpu",
+                      precision="32",
                       max_epochs=cfg.training_epochs,
                       log_every_n_steps=1,
                       limit_train_batches=3500,

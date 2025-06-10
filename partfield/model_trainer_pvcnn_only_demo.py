@@ -18,12 +18,15 @@ import json
 import gc
 import time
 from plyfile import PlyData, PlyElement
+import gc
 
 
 class Model(pl.LightningModule):
     def __init__(self, cfg):
         super().__init__()
 
+        self.strict_loading = False
+        self.automatic_optimization = False
         self.save_hyperparameters()
         self.cfg = cfg
         self.automatic_optimization = False
@@ -48,10 +51,10 @@ class Model(pl.LightningModule):
         if self.use_pvcnn:
             self.pvcnn = TriPlanePC2Encoder(
                 cfg.pvcnn,
-                device="cuda",
+                device="cpu",
                 shape_min=-1, 
                 shape_length=2,
-                use_2d_feat=self.use_2d_feat) #.cuda()
+                use_2d_feat=self.use_2d_feat)
         self.logit_scale = nn.Parameter(torch.tensor([1.0], requires_grad=True))
         self.grid_coord = get_grid_coord(256)
         self.mse_loss = torch.nn.MSELoss()
@@ -116,7 +119,7 @@ class Model(pl.LightningModule):
         sdf_planes, part_planes = torch.split(planes, [64, planes.shape[2] - 64], dim=2)
 
         if self.cfg.is_pc:
-            tensor_vertices = batch['pc'].reshape(1, -1, 3).cuda().to(torch.float16)
+            tensor_vertices = batch['pc'].reshape(1, -1, 3).to(torch.float32)
             point_feat = sample_triplane_feat(part_planes, tensor_vertices) # N, M, C
             point_feat = point_feat.cpu().detach().numpy().reshape(-1, 448)
 
@@ -155,8 +158,8 @@ class Model(pl.LightningModule):
             ############
         
         else:
-            use_cuda_version = True
-            if use_cuda_version:
+            use_optimized_version = True
+            if use_optimized_version:
 
                 def sample_points(vertices, faces, n_point_per_face):
                     # Generate random barycentric coordinates
@@ -223,7 +226,8 @@ class Model(pl.LightningModule):
                     colored_mesh = trimesh.Trimesh(vertices=V, faces=F, face_colors=colors_255, process=False)
                 colored_mesh.export(f'{save_dir}/feat_pca_{uid}_{view_id}.ply')
                 ############
-                torch.cuda.empty_cache()
+                # Clear memory
+                gc.collect()
 
             else:
                 ### Mesh input (obj file)
@@ -249,7 +253,7 @@ class Model(pl.LightningModule):
                     # Calculate points in Cartesian coordinates
                     points = u * v0 + v * v1 + w * v2 
 
-                    tensor_vertices = torch.from_numpy(points.copy()).reshape(1, -1, 3).cuda().to(torch.float32)
+                    tensor_vertices = torch.from_numpy(points.copy()).reshape(1, -1, 3).to(torch.float32)
                     point_feat = sample_triplane_feat(part_planes, tensor_vertices) # N, M, C 
 
                     #### Take mean feature in the triangle
@@ -280,4 +284,4 @@ class Model(pl.LightningModule):
 
         print("Time elapsed: " + str(time.time()-starttime))
             
-        return 
+        return
