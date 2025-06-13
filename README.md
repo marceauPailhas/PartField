@@ -28,16 +28,16 @@ The link to download our pretrained model is here: [Trained on Objaverse](https:
 
 ## Environment Setup
 
-We use Python 3.10 with PyTorch 2.4 and CUDA 12.4. The environment and required packages can be installed individually as follows:
+We use Python 3.10 with PyTorch 2.4 . The environment and required packages can be installed individually as follows:
 ```
 conda create -n partfield python=3.10
 conda activate partfield
 conda install nvidia/label/cuda-12.4.0::cuda
 pip install psutil
-pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 
 pip install lightning==2.2 h5py yacs trimesh scikit-image loguru boto3
 pip install mesh2sdf tetgen pymeshlab plyfile einops libigl polyscope potpourri3d simple_parsing arrgh open3d
-pip install torch-scatter -f https://data.pyg.org/whl/torch-2.4.0+cu124.html
+pip install torch-scatter 
 apt install libx11-6 libgl1 libxrender1
 pip install vtk
 ```
