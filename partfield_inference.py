@@ -26,8 +26,11 @@ def predict(cfg):
         verbose=True
     )]
 
+    device = "cpu"  # Force CPU to avoid MPS compatibility issues
+    print(f"Using device: {device}")
+
     trainer = Trainer(devices=1,
-                      accelerator="cpu",
+                      accelerator=device,
                       precision="32",
                       max_epochs=cfg.training_epochs,
                       log_every_n_steps=1,

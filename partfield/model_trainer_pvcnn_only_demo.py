@@ -32,6 +32,10 @@ class Model(pl.LightningModule):
         self.automatic_optimization = False
         self.triplane_resolution = cfg.triplane_resolution
         self.triplane_channels_low = cfg.triplane_channels_low
+        
+        # Determine device - Force CPU to avoid MPS compatibility issues
+        self.device_type = "cpu"
+        
         self.triplane_transformer = TriplaneTransformer(
             input_dim=cfg.triplane_channels_low * 2,
             transformer_dim=1024,
@@ -51,12 +55,12 @@ class Model(pl.LightningModule):
         if self.use_pvcnn:
             self.pvcnn = TriPlanePC2Encoder(
                 cfg.pvcnn,
-                device="cpu",
+                device=self.device_type,
                 shape_min=-1, 
                 shape_length=2,
                 use_2d_feat=self.use_2d_feat)
-        self.logit_scale = nn.Parameter(torch.tensor([1.0], requires_grad=True))
-        self.grid_coord = get_grid_coord(256)
+        self.logit_scale = nn.Parameter(torch.tensor([1.0], dtype=torch.float32, requires_grad=True))
+        self.grid_coord = get_grid_coord(256).to(torch.float32)
         self.mse_loss = torch.nn.MSELoss()
         self.l1_loss = torch.nn.L1Loss(reduction='none')
 
@@ -119,7 +123,7 @@ class Model(pl.LightningModule):
         sdf_planes, part_planes = torch.split(planes, [64, planes.shape[2] - 64], dim=2)
 
         if self.cfg.is_pc:
-            tensor_vertices = batch['pc'].reshape(1, -1, 3).to(torch.float32)
+            tensor_vertices = batch['pc'].reshape(1, -1, 3).to(torch.float32).to(self.device)
             point_feat = sample_triplane_feat(part_planes, tensor_vertices) # N, M, C
             point_feat = point_feat.cpu().detach().numpy().reshape(-1, 448)
 
@@ -195,12 +199,15 @@ class Model(pl.LightningModule):
                     return torch.cat(all_sample, dim=1)
                 
                 if self.cfg.vertex_feature:
-                    tensor_vertices = batch['vertices'][0].reshape(1, -1, 3).to(torch.float32)
+                    tensor_vertices = batch['vertices'][0].reshape(1, -1, 3).to(torch.float32).to(self.device)
                     point_feat = sample_and_mean_memory_save_version(part_planes, tensor_vertices, 1)
                 else:
                     n_point_per_face = self.cfg.n_point_per_face
-                    tensor_vertices = sample_points(batch['vertices'][0], batch['faces'][0], n_point_per_face)
-                    tensor_vertices = tensor_vertices.reshape(1, -1, 3).to(torch.float32)
+                    # Ensure vertices and faces are on the correct device with float32 dtype
+                    vertices_device = batch['vertices'][0].to(torch.float32).to(self.device)
+                    faces_device = batch['faces'][0].to(torch.long).to(self.device)  # faces should be long for indexing
+                    tensor_vertices = sample_points(vertices_device, faces_device, n_point_per_face)
+                    tensor_vertices = tensor_vertices.reshape(1, -1, 3).to(torch.float32).to(self.device)
                     point_feat = sample_and_mean_memory_save_version(part_planes, tensor_vertices, n_point_per_face)  # N, M, C
 
                 #### Take mean feature in the triangle
@@ -253,8 +260,8 @@ class Model(pl.LightningModule):
                     # Calculate points in Cartesian coordinates
                     points = u * v0 + v * v1 + w * v2 
 
-                    tensor_vertices = torch.from_numpy(points.copy()).reshape(1, -1, 3).to(torch.float32)
-                    point_feat = sample_triplane_feat(part_planes, tensor_vertices) # N, M, C 
+                    tensor_vertices = torch.from_numpy(points.copy()).reshape(1, -1, 3).to(torch.float32).to(self.device)
+                    point_feat = sample_triplane_feat(part_planes, tensor_vertices) # N, M, C
 
                     #### Take mean feature in the triangle
                     point_feat = torch.mean(point_feat, axis=1).cpu().detach().numpy()

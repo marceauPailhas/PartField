@@ -31,7 +31,7 @@ class Options:
     filename: str
 
     """System Options"""
-    device: str = "cuda"  #  Device
+    device: str = "cpu"  #  Device - Force CPU to avoid MPS compatibility issues
     debug: bool = False  #  enable debug checks
     extras: bool = False # include extra output for viz/debugging
 

@@ -32,7 +32,7 @@ class Options:
     filename_alt: str = None
 
     """System Options"""
-    device: str = "cuda"  #  Device
+    device: str = "cpu"  #  Device - Force CPU to avoid MPS compatibility issues
     debug: bool = False  #  enable debug checks
     extras: bool = False # include extra output for viz/debugging
 
@@ -102,7 +102,7 @@ def load_features(feature_filename, mesh_filename, viz_mode):
         'F' : F, 
         'pca_colors' : pca_colors, 
         'feat_np' : feat,
-        'feat_pt' : torch.tensor(feat, device='cuda'),
+        'feat_pt' : torch.tensor(feat, device='cpu'),
         'trimesh' : tm,
         'label' : None,
         'num_cluster' : 1,
@@ -165,7 +165,7 @@ def ps_callback(opts):
 
                 # get the feature via interpolation
                 point_feat = m['feat_np'][f_hit,:]
-                point_feat_pt = torch.tensor(point_feat, device='cuda')
+                point_feat_pt = torch.tensor(point_feat, device='cpu')
 
                 all_dists1 = feature_distance_pt(m['feat_pt'], point_feat_pt).detach().cpu().numpy()
                 m['ps_mesh'].add_scalar_quantity("distance", all_dists1, cmap='blues', vminmax=(0, opts.feature_range), enabled=True, defined_on=m["viz_mode"])
@@ -382,4 +382,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -42,7 +42,7 @@ def sample_from_planes(plane_features, coordinates, mode='bilinear', padding_mod
                                 [0, 1, 0]],
                                 [[0, 0, 1],
                                 [0, 1, 0],
-                                [1, 0, 0]]], dtype=torch.float32).cuda()
+                                [1, 0, 0]]], dtype=torch.float32, device=plane_features.device)
     
     assert padding_mode == 'zeros'
     N, n_planes, C, H, W = plane_features.shape
@@ -55,9 +55,9 @@ def sample_from_planes(plane_features, coordinates, mode='bilinear', padding_mod
 
 def get_grid_coord(grid_size = 256, align_corners=False):
     if align_corners == False:
-        coords = torch.linspace(-1 + 1/(grid_size), 1 - 1/(grid_size), steps=grid_size)
+        coords = torch.linspace(-1 + 1/(grid_size), 1 - 1/(grid_size), steps=grid_size, dtype=torch.float32)
     else:
-        coords = torch.linspace(-1, 1, steps=grid_size)
+        coords = torch.linspace(-1, 1, steps=grid_size, dtype=torch.float32)
     i, j, k = torch.meshgrid(coords, coords, coords, indexing='ij')
     coordinates = torch.stack((i, j, k), dim=-1).reshape(-1, 3)
     return coordinates
@@ -196,7 +196,7 @@ class Voxel2Triplane(nn.Module):
         self.voxel_feat_dim = voxel_feat_dim
 
         # initialize pos_embed with 1/sqrt(dim) * N(0, 1)
-        self.pos_embed = nn.Parameter(torch.randn(1, 3*triplane_low_res**2, transformer_dim) * (1. / transformer_dim) ** 0.5)
+        self.pos_embed = nn.Parameter(torch.randn(1, 3*triplane_low_res**2, transformer_dim, dtype=torch.float32) * (1. / transformer_dim) ** 0.5)
         self.transformer = TransformerDecoder(
             block_type='cond',
             num_layers=transformer_layers, num_heads=transformer_heads,
@@ -207,7 +207,7 @@ class Voxel2Triplane(nn.Module):
         self.normalize_vox_feat = normalize_vox_feat
         if normalize_vox_feat:
             self.vox_norm = nn.LayerNorm(voxel_feat_dim, eps=1e-6)
-            self.vox_pos_embed = nn.Parameter(torch.randn(1, voxel_dim * voxel_dim * voxel_dim, voxel_feat_dim) * (1. / voxel_feat_dim) ** 0.5)
+            self.vox_pos_embed = nn.Parameter(torch.randn(1, voxel_dim * voxel_dim * voxel_dim, voxel_feat_dim, dtype=torch.float32) * (1. / voxel_feat_dim) ** 0.5)
 
     def forward_transformer(self, voxel_feats):
         N = voxel_feats.shape[0]
@@ -263,7 +263,7 @@ class TriplaneTransformer(nn.Module):
         self.triplane_dim = triplane_dim
 
         # initialize pos_embed with 1/sqrt(dim) * N(0, 1)
-        self.pos_embed = nn.Parameter(torch.randn(1, 3*triplane_low_res**2, transformer_dim) * (1. / transformer_dim) ** 0.5)
+        self.pos_embed = nn.Parameter(torch.randn(1, 3*triplane_low_res**2, transformer_dim, dtype=torch.float32) * (1. / transformer_dim) ** 0.5)
         self.transformer = TransformerDecoder(
             block_type='basic',
             num_layers=transformer_layers, num_heads=transformer_heads,

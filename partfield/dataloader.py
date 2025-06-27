@@ -185,8 +185,8 @@ class Demo_Dataset(torch.utils.data.Dataset):
         result['pc'] = torch.tensor(pc, dtype=torch.float32)
 
         if not self.is_pc:
-            result['vertices'] = mesh.vertices
-            result['faces'] = mesh.faces
+            result['vertices'] = torch.tensor(mesh.vertices, dtype=torch.float32)
+            result['faces'] = torch.tensor(mesh.faces, dtype=torch.float32)
 
         return result
 
@@ -336,8 +336,8 @@ class Demo_Remesh_Dataset(torch.utils.data.Dataset):
                 }
 
         result['pc'] = torch.tensor(pc, dtype=torch.float32)
-        result['vertices'] = mesh.vertices
-        result['faces'] = mesh.faces
+        result['vertices'] = torch.tensor(mesh.vertices, dtype=torch.float32)
+        result['faces'] = torch.tensor(mesh.faces, dtype=torch.float32)
 
         return result
 
@@ -363,4 +363,3 @@ class Correspondence_Demo_Dataset(Demo_Dataset):
         self.result_name = cfg.result_name
 
         print("val dataset len:", len(self.data_list))
-    

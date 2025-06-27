@@ -37,8 +37,7 @@ class VanillaMLP(nn.Module):
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x, split_size=100000):
-        with torch.cuda.amp.autocast(enabled=False):
-            out = self.layers(x)
+        out = self.layers(x)
         return out
 
     def make_linear(self, dim_in, dim_out, is_first, is_last):

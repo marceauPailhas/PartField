@@ -31,7 +31,7 @@ if __name__ == '__main__':
     assert len(all_files) % 2 == 0
     num_pairs = len(all_files) // 2
 
-    device = "cuda"
+    device = "cpu"  # Force CPU to avoid MPS compatibility issues
 
     output_dir = "../exp_results/correspondence/"
     os.makedirs(output_dir, exist_ok=True)
@@ -77,4 +77,3 @@ if __name__ == '__main__':
         
         output_mesh0.export(os.path.join(output_dir, f"correspondence_{uid0}_{uid1}_0.ply"))
         output_mesh1.export(os.path.join(output_dir, f"correspondence_{uid0}_{uid1}_1.ply"))
-
