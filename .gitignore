@@ -125,7 +125,6 @@ package-lock.json
 cache/
 
 # Screenshots and images (if large)
-*.png
 *.jpg
 *.jpeg
 *.gif
