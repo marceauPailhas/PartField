@@ -21,8 +21,9 @@ from plyfile import PlyData
 import open3d as o3d
 from partfield.utils import *
 
+
 #### Export to file #####
-def export_colored_mesh_ply(V, F, FL, filename='segmented_mesh.ply'):
+def export_colored_mesh_ply(V, F, FL, filename="segmented_mesh.ply"):
     """
     Export a mesh with per-face segmentation labels into a colored PLY file.
 
@@ -40,8 +41,7 @@ def export_colored_mesh_ply(V, F, FL, filename='segmented_mesh.ply'):
     unique_labels = np.unique(FL)
     colormap = plt.cm.get_cmap("tab20", len(unique_labels))
     label_to_color = {
-        label: (np.array(colormap(i)[:3]) * 255).astype(np.uint8)
-        for i, label in enumerate(unique_labels)
+        label: (np.array(colormap(i)[:3]) * 255).astype(np.uint8) for i, label in enumerate(unique_labels)
     }
 
     mesh = trimesh.Trimesh(vertices=V, faces=F)
@@ -55,10 +55,11 @@ def export_colored_mesh_ply(V, F, FL, filename='segmented_mesh.ply'):
     mesh.export(filename)
     print(f"Exported mesh to {filename}")
 
-def export_pointcloud_with_labels_to_ply(V, VL, filename='colored_pointcloud.ply'):
+
+def export_pointcloud_with_labels_to_ply(V, VL, filename="colored_pointcloud.ply"):
     """
     Export a labeled point cloud to a PLY file with vertex colors.
-    
+
     Parameters:
     - V: (N, 3) numpy array of XYZ coordinates
     - VL: (N,) numpy array of integer labels
@@ -69,14 +70,12 @@ def export_pointcloud_with_labels_to_ply(V, VL, filename='colored_pointcloud.ply
     # Generate unique colors for each label
     unique_labels = np.unique(VL)
     colormap = plt.cm.get_cmap("tab20", len(unique_labels))
-    label_to_color = {
-        label: colormap(i)[:3] for i, label in enumerate(unique_labels)
-    }
+    label_to_color = {label: colormap(i)[:3] for i, label in enumerate(unique_labels)}
 
     VL = np.squeeze(VL)
     # Map labels to RGB colors
     colors = np.array([label_to_color[label] for label in VL])
-    
+
     # Open3D requires colors in float [0, 1]
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(V)
@@ -85,7 +84,10 @@ def export_pointcloud_with_labels_to_ply(V, VL, filename='colored_pointcloud.ply
     # Save to .ply
     o3d.io.write_point_cloud(filename, pcd)
     print(f"Point cloud saved to {filename}")
+
+
 #########################
+
 
 #########################
 def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=True):
@@ -99,7 +101,7 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
       2) Use a KNN graph (k=10) based on centroid distances on each connected component.
       3) Compute MST of that KNN graph.
       4) Add MST edges that connect different components as "dummy" edges
-         in the face adjacency matrix, ensuring one connected component. The selected face for 
+         in the face adjacency matrix, ensuring one connected component. The selected face for
          each connected component is the face closest to the component centroid.
 
     Parameters
@@ -123,19 +125,15 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
         # Return an empty matrix if no faces
         return csr_matrix((0, 0))
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 1) Build adjacency based on shared edges.
     #    (Same logic as the original code, plus import statements.)
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     edge_to_faces = defaultdict(list)
     uf = UnionFind(num_faces)
     for f_idx, (v0, v1, v2) in enumerate(face_list):
         # Sort each edge’s endpoints so (i, j) == (j, i)
-        edges = [
-            tuple(sorted((v0, v1))),
-            tuple(sorted((v1, v2))),
-            tuple(sorted((v2, v0)))
-        ]
+        edges = [tuple(sorted((v0, v1))), tuple(sorted((v1, v2))), tuple(sorted((v2, v0)))]
         for e in edges:
             edge_to_faces[e].append(f_idx)
 
@@ -157,13 +155,11 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
                     uf.union(fi, fj)
 
     data = np.ones(len(row), dtype=np.int8)
-    face_adjacency = coo_matrix(
-        (data, (row, col)), shape=(num_faces, num_faces)
-    ).tocsr()
+    face_adjacency = coo_matrix((data, (row, col)), shape=(num_faces, num_faces)).tocsr()
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 2) Check if the graph from shared edges is already connected.
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     n_components = 0
     for i in range(num_faces):
         if uf.find(i) == i:
@@ -174,11 +170,11 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
         # Already a single connected component, no need for dummy edges
         return face_adjacency
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 3) Compute centroids of each face for building a KNN graph.
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     face_centroids = []
-    for (v0, v1, v2) in face_list:
+    for v0, v1, v2 in face_list:
         centroid = (vertices[v0] + vertices[v1] + vertices[v2]) / 3.0
         face_centroids.append(centroid)
     face_centroids = np.array(face_centroids)
@@ -192,9 +188,9 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
     # # 'distances[i]' are the distances from face i to each of its 'k' neighbors
     # # 'indices[i]' are the face indices of those neighbors
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 4b) Build a KNN graph on connected components
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # Group faces by their root representative in the Union-Find structure
     component_dict = {}
     for face_idx in range(num_faces):
@@ -204,18 +200,20 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
         component_dict[root].add(face_idx)
 
     connected_components = list(component_dict.values())
-    
+
     print("Using connected component MST.")
     component_centroid_face_idx = []
     connected_component_centroids = []
-    knn = NearestNeighbors(n_neighbors=1, algorithm='auto')
+    knn = NearestNeighbors(n_neighbors=1, algorithm="auto")
     for component in connected_components:
         curr_component_faces = list(component)
         curr_component_face_centroids = face_centroids[curr_component_faces]
         component_centroid = np.mean(curr_component_face_centroids, axis=0)
 
         ### Assign a face closest to the centroid
-        face_idx = curr_component_faces[np.argmin(np.linalg.norm(curr_component_face_centroids-component_centroid, axis=-1))]
+        face_idx = curr_component_faces[
+            np.argmin(np.linalg.norm(curr_component_face_centroids - component_centroid, axis=-1))
+        ]
 
         connected_component_centroids.append(component_centroid)
         component_centroid_face_idx.append(face_idx)
@@ -224,15 +222,15 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
     connected_component_centroids = np.array(connected_component_centroids)
 
     if n_components < k:
-        knn = NearestNeighbors(n_neighbors=n_components, algorithm='auto')
+        knn = NearestNeighbors(n_neighbors=n_components, algorithm="auto")
     else:
-        knn = NearestNeighbors(n_neighbors=k, algorithm='auto')
+        knn = NearestNeighbors(n_neighbors=k, algorithm="auto")
     knn.fit(connected_component_centroids)
-    distances, indices = knn.kneighbors(connected_component_centroids)    
+    distances, indices = knn.kneighbors(connected_component_centroids)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 5) Build a weighted graph in NetworkX using centroid-distances as edges
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     G = nx.Graph()
     # Add each face as a node in the graph
     G.add_nodes_from(range(num_faces))
@@ -249,25 +247,23 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
             # but it typically overwrites the weight if (i, j) already exists.
             G.add_edge(i, j, weight=dist)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 6) Compute MST on that KNN graph
-    #--------------------------------------------------------------------------
-    mst = nx.minimum_spanning_tree(G, weight='weight')
+    # --------------------------------------------------------------------------
+    mst = nx.minimum_spanning_tree(G, weight="weight")
     # Sort MST edges by ascending weight, so we add the shortest edges first
-    mst_edges_sorted = sorted(
-        mst.edges(data=True), key=lambda e: e[2]['weight']
-    )
+    mst_edges_sorted = sorted(mst.edges(data=True), key=lambda e: e[2]["weight"])
     print("mst edges sorted", len(mst_edges_sorted))
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 7) Use a union-find structure to add MST edges only if they
     #    connect two currently disconnected components of the adjacency matrix
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     # Convert face_adjacency to LIL format for efficient edge addition
     adjacency_lil = face_adjacency.tolil()
 
     # Now, step through MST edges in ascending order
-    for (u, v, attr) in mst_edges_sorted:
+    for u, v, attr in mst_edges_sorted:
         if uf.find(u) != uf.find(v):
             # These belong to different components, so unify them
             uf.union(u, v)
@@ -286,20 +282,20 @@ def construct_face_adjacency_matrix_ccmst(face_list, vertices, k=10, with_knn=Tr
         for idx1 in range(n_components):
             i = component_centroid_face_idx[idx1]
             for idx2 in indices[idx1]:
-                j = component_centroid_face_idx[idx2]     
+                j = component_centroid_face_idx[idx2]
                 dummy_row.extend([i, j])
-                dummy_col.extend([j, i]) ### duplicates are handled by coo
+                dummy_col.extend([j, i])  ### duplicates are handled by coo
 
         dummy_data = np.ones(len(dummy_row), dtype=np.int16)
-        dummy_mat = coo_matrix(
-            (dummy_data, (dummy_row, dummy_col)),
-            shape=(num_faces, num_faces)
-        ).tocsr()
+        dummy_mat = coo_matrix((dummy_data, (dummy_row, dummy_col)), shape=(num_faces, num_faces)).tocsr()
         face_adjacency = face_adjacency + dummy_mat
         ###########################
 
     return face_adjacency
+
+
 #########################
+
 
 def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=True):
     """
@@ -335,19 +331,15 @@ def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=
         # Return an empty matrix if no faces
         return csr_matrix((0, 0))
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 1) Build adjacency based on shared edges.
     #    (Same logic as the original code, plus import statements.)
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     edge_to_faces = defaultdict(list)
     uf = UnionFind(num_faces)
     for f_idx, (v0, v1, v2) in enumerate(face_list):
         # Sort each edge’s endpoints so (i, j) == (j, i)
-        edges = [
-            tuple(sorted((v0, v1))),
-            tuple(sorted((v1, v2))),
-            tuple(sorted((v2, v0)))
-        ]
+        edges = [tuple(sorted((v0, v1))), tuple(sorted((v1, v2))), tuple(sorted((v2, v0)))]
         for e in edges:
             edge_to_faces[e].append(f_idx)
 
@@ -369,13 +361,11 @@ def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=
                     uf.union(fi, fj)
 
     data = np.ones(len(row), dtype=np.int8)
-    face_adjacency = coo_matrix(
-        (data, (row, col)), shape=(num_faces, num_faces)
-    ).tocsr()
+    face_adjacency = coo_matrix((data, (row, col)), shape=(num_faces, num_faces)).tocsr()
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 2) Check if the graph from shared edges is already connected.
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     n_components = 0
     for i in range(num_faces):
         if uf.find(i) == i:
@@ -385,27 +375,27 @@ def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=
     if n_components == 1:
         # Already a single connected component, no need for dummy edges
         return face_adjacency
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 3) Compute centroids of each face for building a KNN graph.
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     face_centroids = []
-    for (v0, v1, v2) in face_list:
+    for v0, v1, v2 in face_list:
         centroid = (vertices[v0] + vertices[v1] + vertices[v2]) / 3.0
         face_centroids.append(centroid)
     face_centroids = np.array(face_centroids)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 4) Build a KNN graph (k=10) over face centroids using scikit‐learn
-    #--------------------------------------------------------------------------
-    knn = NearestNeighbors(n_neighbors=k, algorithm='auto')
+    # --------------------------------------------------------------------------
+    knn = NearestNeighbors(n_neighbors=k, algorithm="auto")
     knn.fit(face_centroids)
     distances, indices = knn.kneighbors(face_centroids)
     # 'distances[i]' are the distances from face i to each of its 'k' neighbors
     # 'indices[i]' are the face indices of those neighbors
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 5) Build a weighted graph in NetworkX using centroid-distances as edges
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     G = nx.Graph()
     # Add each face as a node in the graph
     G.add_nodes_from(range(num_faces))
@@ -420,25 +410,23 @@ def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=
             # but it typically overwrites the weight if (i, j) already exists.
             G.add_edge(i, j, weight=dist)
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 6) Compute MST on that KNN graph
-    #--------------------------------------------------------------------------
-    mst = nx.minimum_spanning_tree(G, weight='weight')
+    # --------------------------------------------------------------------------
+    mst = nx.minimum_spanning_tree(G, weight="weight")
     # Sort MST edges by ascending weight, so we add the shortest edges first
-    mst_edges_sorted = sorted(
-        mst.edges(data=True), key=lambda e: e[2]['weight']
-    )
+    mst_edges_sorted = sorted(mst.edges(data=True), key=lambda e: e[2]["weight"])
     print("mst edges sorted", len(mst_edges_sorted))
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     # 7) Use a union-find structure to add MST edges only if they
     #    connect two currently disconnected components of the adjacency matrix
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     # Convert face_adjacency to LIL format for efficient edge addition
     adjacency_lil = face_adjacency.tolil()
 
     # Now, step through MST edges in ascending order
-    for (u, v, attr) in mst_edges_sorted:
+    for u, v, attr in mst_edges_sorted:
         if uf.find(u) != uf.find(v):
             # These belong to different components, so unify them
             uf.union(u, v)
@@ -455,19 +443,17 @@ def construct_face_adjacency_matrix_facemst(face_list, vertices, k=10, with_knn=
         dummy_row = []
         dummy_col = []
         for i in range(num_faces):
-            for j in indices[i]:        
+            for j in indices[i]:
                 dummy_row.extend([i, j])
-                dummy_col.extend([j, i]) ### duplicates are handled by coo
+                dummy_col.extend([j, i])  ### duplicates are handled by coo
 
         dummy_data = np.ones(len(dummy_row), dtype=np.int16)
-        dummy_mat = coo_matrix(
-            (dummy_data, (dummy_row, dummy_col)),
-            shape=(num_faces, num_faces)
-        ).tocsr()
+        dummy_mat = coo_matrix((dummy_data, (dummy_row, dummy_col)), shape=(num_faces, num_faces)).tocsr()
         face_adjacency = face_adjacency + dummy_mat
         ###########################
 
     return face_adjacency
+
 
 def construct_face_adjacency_matrix_naive(face_list):
     """
@@ -475,7 +461,7 @@ def construct_face_adjacency_matrix_naive(face_list):
     construct a face-based adjacency matrix of shape (num_faces, num_faces).
     Two faces are adjacent if they share an edge.
 
-    If multiple connected components exist, dummy edges are added to 
+    If multiple connected components exist, dummy edges are added to
     turn them into a single connected component. Edges are added naively by
     randomly selecting a face and connecting consecutive components -- (comp_i, comp_i+1) ...
 
@@ -487,8 +473,8 @@ def construct_face_adjacency_matrix_naive(face_list):
     Returns
     -------
     face_adjacency : scipy.sparse.csr_matrix
-        A CSR sparse matrix of shape (num_faces, num_faces), 
-        containing 1s for adjacent faces and 0s otherwise. 
+        A CSR sparse matrix of shape (num_faces, num_faces),
+        containing 1s for adjacent faces and 0s otherwise.
         Additional edges are added if the faces are in multiple components.
     """
 
@@ -504,11 +490,7 @@ def construct_face_adjacency_matrix_naive(face_list):
     for f_idx, (v0, v1, v2) in enumerate(face_list):
         # For an edge, we always store its endpoints in sorted order
         # to avoid duplication (e.g. edge (2,5) is the same as (5,2)).
-        edges = [
-            tuple(sorted((v0, v1))),
-            tuple(sorted((v1, v2))),
-            tuple(sorted((v2, v0)))
-        ]
+        edges = [tuple(sorted((v0, v1))), tuple(sorted((v1, v2))), tuple(sorted((v2, v0)))]
         for e in edges:
             edge_to_faces[e].append(f_idx)
 
@@ -531,10 +513,7 @@ def construct_face_adjacency_matrix_naive(face_list):
 
     # Create a COO matrix, then convert it to CSR
     data = np.ones(len(row), dtype=np.int8)
-    face_adjacency = coo_matrix(
-        (data, (row, col)),
-        shape=(num_faces, num_faces)
-    ).tocsr()
+    face_adjacency = coo_matrix((data, (row, col)), shape=(num_faces, num_faces)).tocsr()
 
     # Step 3: Ensure single connected component
     # Use connected_components to see how many components exist
@@ -564,28 +543,26 @@ def construct_face_adjacency_matrix_naive(face_list):
 
         if dummy_row:
             dummy_data = np.ones(len(dummy_row), dtype=np.int8)
-            dummy_mat = coo_matrix(
-                (dummy_data, (dummy_row, dummy_col)),
-                shape=(num_faces, num_faces)
-            ).tocsr()
+            dummy_mat = coo_matrix((dummy_data, (dummy_row, dummy_col)), shape=(num_faces, num_faces)).tocsr()
             face_adjacency = face_adjacency + dummy_mat
 
     return face_adjacency
+
 
 class UnionFind:
     def __init__(self, n):
         self.parent = list(range(n))
         self.rank = [1] * n
-    
+
     def find(self, x):
         if self.parent[x] != x:
             self.parent[x] = self.find(self.parent[x])
         return self.parent[x]
-    
+
     def union(self, x, y):
         rootX = self.find(x)
         rootY = self.find(y)
-        
+
         if rootX != rootY:
             if self.rank[rootX] > self.rank[rootY]:
                 self.parent[rootY] = rootX
@@ -595,25 +572,27 @@ class UnionFind:
                 self.parent[rootY] = rootX
                 self.rank[rootX] += 1
 
+
 def hierarchical_clustering_labels(children, n_samples, max_cluster=20):
     # Union-Find structure to maintain cluster merges
     uf = UnionFind(2 * n_samples - 1)  # We may need to store up to 2*n_samples - 1 clusters
-    
+
     current_cluster_count = n_samples
-    
+
     # Process merges from the children array
     hierarchical_labels = []
     for i, (child1, child2) in enumerate(children):
         uf.union(child1, i + n_samples)
         uf.union(child2, i + n_samples)
-        #uf.union(child1, child2)
+        # uf.union(child1, child2)
         current_cluster_count -= 1  # After each merge, we reduce the cluster count
-        
+
         if current_cluster_count <= max_cluster:
             labels = [uf.find(i) for i in range(n_samples)]
             hierarchical_labels.append(labels)
-    
+
     return hierarchical_labels
+
 
 def load_ply_to_numpy(filename):
     """
@@ -627,20 +606,33 @@ def load_ply_to_numpy(filename):
     """
     # Read PLY file
     ply_data = PlyData.read(filename)
-    
+
     # Extract vertex data
     vertex_data = ply_data["vertex"]
-    
+
     # Convert to NumPy array (x, y, z)
     points = np.vstack([vertex_data["x"], vertex_data["y"], vertex_data["z"]]).T
-    
+
     return points
 
-def solve_clustering(input_fname, uid, view_id, save_dir="test_results1", out_render_fol= "test_render_clustering", use_agglo=False, max_num_clusters=18, is_pc=False, option=1, with_knn=True, export_mesh=True):
+
+def solve_clustering(
+    input_fname,
+    uid,
+    view_id,
+    save_dir="test_results1",
+    out_render_fol="test_render_clustering",
+    use_agglo=False,
+    max_num_clusters=18,
+    is_pc=False,
+    option=1,
+    with_knn=True,
+    export_mesh=True,
+):
     print(uid, view_id)
-    
+
     if not is_pc:
-        input_fname = f'{save_dir}/input_{uid}_{view_id}.ply'
+        input_fname = f"{save_dir}/input_{uid}_{view_id}.ply"
         mesh = load_mesh_util(input_fname)
 
     else:
@@ -648,15 +640,15 @@ def solve_clustering(input_fname, uid, view_id, save_dir="test_results1", out_re
 
     ### Load inferred PartField features
     try:
-        point_feat = np.load(f'{save_dir}/part_feat_{uid}_{view_id}.npy')
+        point_feat = np.load(f"{save_dir}/part_feat_{uid}_{view_id}.npy")
     except:
         try:
-            point_feat = np.load(f'{save_dir}/part_feat_{uid}_{view_id}_batch.npy')
+            point_feat = np.load(f"{save_dir}/part_feat_{uid}_{view_id}_batch.npy")
 
         except:
             print()
             print("pointfeat loading error. skipping...")
-            print(f'{save_dir}/part_feat_{uid}_{view_id}_batch.npy')
+            print(f"{save_dir}/part_feat_{uid}_{view_id}_batch.npy")
             return
 
     point_feat = point_feat / np.linalg.norm(point_feat, axis=-1, keepdims=True)
@@ -666,30 +658,33 @@ def solve_clustering(input_fname, uid, view_id, save_dir="test_results1", out_re
             clustering = KMeans(n_clusters=num_cluster, random_state=0).fit(point_feat)
             labels = clustering.labels_
 
-            
             pred_labels = np.zeros((len(labels), 1))
             for i, label in enumerate(np.unique(labels)):
                 # print(i, label)
                 pred_labels[labels == label] = i  # Assign RGB values to each label
 
-            fname_clustering = os.path.join(out_render_fol, "cluster_out", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2))
+            fname_clustering = os.path.join(
+                out_render_fol, "cluster_out", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2)
+            )
             np.save(fname_clustering, pred_labels)
-            
 
             if not is_pc:
                 V = mesh.vertices
                 F = mesh.faces
 
-                if export_mesh :
-                    fname_mesh = os.path.join(out_render_fol, "ply", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2) + ".ply")
+                if export_mesh:
+                    fname_mesh = os.path.join(
+                        out_render_fol, "ply", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2) + ".ply"
+                    )
                     export_colored_mesh_ply(V, F, pred_labels, filename=fname_mesh)
 
-            
             else:
                 if export_mesh:
-                    fname_pc = os.path.join(out_render_fol, "ply", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2) + ".ply")
+                    fname_pc = os.path.join(
+                        out_render_fol, "ply", str(uid) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2) + ".ply"
+                    )
                     export_pointcloud_with_labels_to_ply(pc, pred_labels, filename=fname_pc)
-        
+
     else:
         if is_pc:
             print("Not implemented error. Agglomerative clustering only for mesh inputs.")
@@ -702,18 +697,20 @@ def solve_clustering(input_fname, uid, view_id, save_dir="test_results1", out_re
         else:
             adj_matrix = construct_face_adjacency_matrix_ccmst(mesh.faces, mesh.vertices, with_knn=with_knn)
 
-        clustering = AgglomerativeClustering(connectivity=adj_matrix,
-                                    n_clusters=1,
-                                    ).fit(point_feat)
-        hierarchical_labels = hierarchical_clustering_labels(clustering.children_, point_feat.shape[0], max_cluster=max_num_clusters)
+        clustering = AgglomerativeClustering(
+            connectivity=adj_matrix,
+            n_clusters=1,
+        ).fit(point_feat)
+        hierarchical_labels = hierarchical_clustering_labels(
+            clustering.children_, point_feat.shape[0], max_cluster=max_num_clusters
+        )
 
         all_FL = []
         for n_cluster in range(max_num_clusters):
-            print("Processing cluster: "+str(n_cluster))
+            print("Processing cluster: " + str(n_cluster))
             labels = hierarchical_labels[n_cluster]
             all_FL.append(labels)
-        
-        
+
         all_FL = np.array(all_FL)
         unique_labels = np.unique(all_FL)
 
@@ -726,29 +723,35 @@ def solve_clustering(input_fname, uid, view_id, save_dir="test_results1", out_re
             V = mesh.vertices
             F = mesh.faces
 
-            if export_mesh :
-                fname_mesh = os.path.join(out_render_fol, "ply", str(uid) + "_" + str(view_id) + "_" + str(max_num_clusters - n_cluster).zfill(2) + ".ply")
+            if export_mesh:
+                fname_mesh = os.path.join(
+                    out_render_fol,
+                    "ply",
+                    str(uid) + "_" + str(view_id) + "_" + str(max_num_clusters - n_cluster).zfill(2) + ".ply",
+                )
                 export_colored_mesh_ply(V, F, FL, filename=fname_mesh)
 
-            fname_clustering = os.path.join(out_render_fol, "cluster_out", str(uid) + "_" + str(view_id) + "_" + str(max_num_clusters - n_cluster).zfill(2))
+            fname_clustering = os.path.join(
+                out_render_fol,
+                "cluster_out",
+                str(uid) + "_" + str(view_id) + "_" + str(max_num_clusters - n_cluster).zfill(2),
+            )
             np.save(fname_clustering, FL)
-        
-        
-            
-if __name__ == '__main__':
 
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source_dir', default= "", type=str)
-    parser.add_argument('--root', default= "", type=str)
-    parser.add_argument('--dump_dir', default= "", type=str)
-    
-    parser.add_argument('--max_num_clusters', default= 20, type=int)
-    parser.add_argument('--use_agglo', default= False, type=bool)
-    parser.add_argument('--is_pc', default= False, type=bool)
-    parser.add_argument('--option', default= 1, type=int)
-    parser.add_argument('--with_knn', default= False, type=bool)
+    parser.add_argument("--source_dir", default="", type=str)
+    parser.add_argument("--root", default="", type=str)
+    parser.add_argument("--dump_dir", default="", type=str)
 
-    parser.add_argument('--export_mesh', default= True, type=bool)
+    parser.add_argument("--max_num_clusters", default=20, type=int)
+    parser.add_argument("--use_agglo", default=False, type=bool)
+    parser.add_argument("--is_pc", default=False, type=bool)
+    parser.add_argument("--option", default=1, type=int)
+    parser.add_argument("--with_knn", default=False, type=bool)
+
+    parser.add_argument("--export_mesh", default=True, type=bool)
 
     FLAGS = parser.parse_args()
     root = FLAGS.root
@@ -768,11 +771,11 @@ if __name__ == '__main__':
     os.makedirs(OUTPUT_FOL, exist_ok=True)
 
     cluster_fol = os.path.join(OUTPUT_FOL, "cluster_out")
-    os.makedirs(cluster_fol, exist_ok=True) 
+    os.makedirs(cluster_fol, exist_ok=True)
 
     if EXPORT_MESH:
         ply_fol = os.path.join(OUTPUT_FOL, "ply")
-        os.makedirs(ply_fol, exist_ok=True)    
+        os.makedirs(ply_fol, exist_ok=True)
 
     #### Get existing model_ids ###
     all_files = os.listdir(os.path.join(OUTPUT_FOL, "ply"))
@@ -795,12 +798,24 @@ if __name__ == '__main__':
             selected.append(f)
         elif (".obj" in f or ".glb" in f) and not IS_PC and f.split(".")[0] not in existing_model_ids:
             selected.append(f)
-    
+
     print("Number of models to process: " + str(len(selected)))
-    
+
     for model in selected:
         fname = os.path.join(SOURCE_DIR, model)
         uid = model.split(".")[-2]
         view_id = 0
 
-        solve_clustering(fname, uid, view_id, save_dir=root, out_render_fol= OUTPUT_FOL, use_agglo=USE_AGGLO, max_num_clusters=MAX_NUM_CLUSTERS, is_pc=IS_PC, option=OPTION, with_knn=WITH_KNN, export_mesh=EXPORT_MESH)
+        solve_clustering(
+            fname,
+            uid,
+            view_id,
+            save_dir=root,
+            out_render_fol=OUTPUT_FOL,
+            use_agglo=USE_AGGLO,
+            max_num_clusters=MAX_NUM_CLUSTERS,
+            is_pc=IS_PC,
+            option=OPTION,
+            with_knn=WITH_KNN,
+            export_mesh=EXPORT_MESH,
+        )

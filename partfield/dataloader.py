@@ -363,3 +363,221 @@ class Correspondence_Demo_Dataset(Demo_Dataset):
         self.result_name = cfg.result_name
 
         print("val dataset len:", len(self.data_list))
+
+
+class Training_Dataset(torch.utils.data.Dataset):
+    def __init__(self, cfg):
+        super().__init__()
+        
+        self.cfg = cfg
+        self.data_path = cfg.dataset.data_path
+        self.pc_num_pts = cfg.dataset.pc_num_pts if hasattr(cfg.dataset, 'pc_num_pts') else 100000
+        self.n_sdf_samples = cfg.dataset.n_sdf_samples if hasattr(cfg.dataset, 'n_sdf_samples') else 100000
+        
+        # Load training data list
+        if hasattr(cfg.dataset, 'train_list'):
+            with open(cfg.dataset.train_list, 'r') as f:
+                self.data_list = [line.strip() for line in f]
+        else:
+            # Default: load all files from training directory
+            train_dir = os.path.join(self.data_path, 'train')
+            self.data_list = []
+            for file in os.listdir(train_dir):
+                if file.endswith(('.obj', '.ply', '.off', '.h5')):
+                    self.data_list.append(os.path.join(train_dir, file))
+        
+        print(f"Training dataset size: {len(self.data_list)}")
+    
+    def __len__(self):
+        return len(self.data_list)
+    
+    def load_shape_data(self, file_path):
+        """Load shape data from various formats"""
+        if file_path.endswith('.h5'):
+            # Load from HDF5 file (typical for processed training data)
+            with h5py.File(file_path, 'r') as f:
+                pc = f['pc'][:]
+                sdf_points = f['sdf_points'][:] if 'sdf_points' in f else None
+                sdf_values = f['sdf_values'][:] if 'sdf_values' in f else None
+                part_labels = f['part_labels'][:] if 'part_labels' in f else None
+                return pc, sdf_points, sdf_values, part_labels
+        else:
+            # Load from mesh file
+            mesh = load_mesh_util(file_path)
+            
+            # Normalize mesh
+            vertices = mesh.vertices
+            bbmin = vertices.min(0)
+            bbmax = vertices.max(0)
+            center = (bbmin + bbmax) * 0.5
+            scale = 2.0 * 0.9 / (bbmax - bbmin).max()
+            vertices = (vertices - center) * scale
+            mesh.vertices = vertices
+            
+            # Sample point cloud
+            pc, face_indices = trimesh.sample.sample_surface(mesh, self.pc_num_pts)
+            
+            # Generate SDF samples
+            sdf_points, sdf_values = self.generate_sdf_samples(mesh)
+            
+            return pc, sdf_points, sdf_values, None
+    
+    def generate_sdf_samples(self, mesh):
+        """Generate SDF samples for training"""
+        # Sample points near surface
+        surface_points, _ = trimesh.sample.sample_surface(mesh, self.n_sdf_samples // 2)
+        
+        # Add noise to surface points
+        noise = np.random.normal(0, 0.01, surface_points.shape)
+        near_surface_points = surface_points + noise
+        
+        # Sample random points in volume
+        bbox_min = mesh.vertices.min(0) - 0.1
+        bbox_max = mesh.vertices.max(0) + 0.1
+        random_points = np.random.uniform(bbox_min, bbox_max, (self.n_sdf_samples // 2, 3))
+        
+        # Combine all sample points
+        sample_points = np.concatenate([near_surface_points, random_points], axis=0)
+        
+        # Compute SDF values (simplified - in practice you'd use a proper SDF computation)
+        # This is a placeholder - you should implement proper SDF computation
+        sdf_values = np.zeros(len(sample_points))
+        for i, point in enumerate(sample_points):
+            # Simple distance to mesh approximation
+            distances = np.linalg.norm(mesh.vertices - point, axis=1)
+            sdf_values[i] = distances.min()
+        
+        return sample_points, sdf_values
+    
+    def sample_point_pairs(self, pc, part_labels=None):
+        """Sample point pairs for contrastive learning"""
+        n_points = len(pc)
+        
+        if part_labels is not None:
+            # Sample based on part labels
+            unique_parts = np.unique(part_labels)
+            
+            # Sample points from same part
+            same_part_indices = []
+            diff_part_indices = []
+            
+            for part_id in unique_parts:
+                part_points = np.where(part_labels == part_id)[0]
+                if len(part_points) > 1:
+                    # Sample pairs from same part
+                    pair_indices = np.random.choice(part_points, size=min(1000, len(part_points)), replace=True)
+                    same_part_indices.extend(pair_indices)
+                    
+                    # Sample from different parts
+                    other_parts = np.where(part_labels != part_id)[0]
+                    if len(other_parts) > 0:
+                        diff_indices = np.random.choice(other_parts, size=min(1000, len(other_parts)), replace=True)
+                        diff_part_indices.extend(diff_indices)
+            
+            pc_same_part = pc[same_part_indices] if same_part_indices else pc[:1000]
+            pc_diff_part = pc[diff_part_indices] if diff_part_indices else pc[1000:2000]
+        else:
+            # Random sampling without part information
+            indices = np.random.choice(n_points, size=min(2000, n_points), replace=False)
+            pc_same_part = pc[indices[:1000]]
+            pc_diff_part = pc[indices[1000:2000]]
+        
+        return pc_same_part, pc_diff_part
+    
+    def sample_triplets(self, pc, part_labels=None):
+        """Sample triplets for triplet loss"""
+        n_points = len(pc)
+        
+        if part_labels is not None:
+            unique_parts = np.unique(part_labels)
+            
+            anchors = []
+            positives = []
+            negatives = []
+            
+            for part_id in unique_parts:
+                part_points = np.where(part_labels == part_id)[0]
+                other_points = np.where(part_labels != part_id)[0]
+                
+                if len(part_points) > 1 and len(other_points) > 0:
+                    # Sample anchor from this part
+                    anchor_idx = np.random.choice(part_points)
+                    anchors.append(anchor_idx)
+                    
+                    # Sample positive from same part
+                    pos_candidates = part_points[part_points != anchor_idx]
+                    pos_idx = np.random.choice(pos_candidates)
+                    positives.append(pos_idx)
+                    
+                    # Sample negative from different part
+                    neg_idx = np.random.choice(other_points)
+                    negatives.append(neg_idx)
+            
+            if anchors:
+                return pc[anchors], pc[positives], pc[negatives]
+        
+        # Fallback to random sampling
+        indices = np.random.choice(n_points, size=min(3000, n_points), replace=False)
+        return pc[indices[:1000]], pc[indices[1000:2000]], pc[indices[2000:3000]]
+    
+    def __getitem__(self, index):
+        file_path = self.data_list[index]
+        
+        try:
+            pc, sdf_points, sdf_values, part_labels = self.load_shape_data(file_path)
+            
+            # Sample point pairs for contrastive learning
+            pc_same_part, pc_diff_part = self.sample_point_pairs(pc, part_labels)
+            
+            # Sample triplets for triplet loss
+            anchor_points, pos_points, neg_points = self.sample_triplets(pc, part_labels)
+            
+            result = {
+                'pc': torch.tensor(pc, dtype=torch.float32),
+                'pc_same_part': torch.tensor(pc_same_part, dtype=torch.float32),
+                'pc_diff_part': torch.tensor(pc_diff_part, dtype=torch.float32),
+                'anchor_points': torch.tensor(anchor_points, dtype=torch.float32),
+                'pos_points': torch.tensor(pos_points, dtype=torch.float32),
+                'neg_points': torch.tensor(neg_points, dtype=torch.float32),
+            }
+            
+            if sdf_points is not None and sdf_values is not None:
+                result['query_points'] = torch.tensor(sdf_points, dtype=torch.float32)
+                result['sdf_gt'] = torch.tensor(sdf_values, dtype=torch.float32)
+            
+            if part_labels is not None:
+                result['part_labels'] = torch.tensor(part_labels, dtype=torch.long)
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
+            # Return a dummy batch
+            dummy_pc = np.random.randn(self.pc_num_pts, 3).astype(np.float32)
+            return {
+                'pc': torch.tensor(dummy_pc, dtype=torch.float32),
+                'pc_same_part': torch.tensor(dummy_pc[:1000], dtype=torch.float32),
+                'pc_diff_part': torch.tensor(dummy_pc[1000:2000], dtype=torch.float32),
+                'anchor_points': torch.tensor(dummy_pc[2000:3000], dtype=torch.float32),
+                'pos_points': torch.tensor(dummy_pc[3000:4000], dtype=torch.float32),
+                'neg_points': torch.tensor(dummy_pc[4000:5000], dtype=torch.float32),
+            }
+
+
+class Validation_Dataset(Training_Dataset):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        
+        # Load validation data list
+        if hasattr(cfg.dataset, 'val_list'):
+            with open(cfg.dataset.val_list, 'r') as f:
+                self.data_list = [line.strip() for line in f]
+        else:
+            # Default: load all files from validation directory
+            val_dir = os.path.join(self.data_path, 'val')
+            self.data_list = []
+            for file in os.listdir(val_dir):
+                if file.endswith(('.obj', '.ply', '.off', '.h5')):
+                    self.data_list.append(os.path.join(val_dir, file))
+        
+        print(f"Validation dataset size: {len(self.data_list)}")
