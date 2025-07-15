@@ -202,12 +202,20 @@ def update_prediction(state: State):
     n_total = 0
     n_correct = 0
 
+    # Print individual mesh accuracies
+    print("Individual mesh accuracies:")
     for obj in state.objects:
         obj["pred_label"] = classifier.predict(obj["feat_np"])
 
         if obj["gt_labels"] is not None:
             n_total += obj["gt_labels"].shape[0]
-            n_correct += np.sum(obj["pred_label"] == obj["gt_labels"], dtype=np.int32) / obj["gt_labels"].shape[0]
+            mesh_correct = np.sum(obj["pred_label"] == obj["gt_labels"], dtype=np.int32)
+            mesh_total = obj["gt_labels"].shape[0]
+            mesh_accuracy = mesh_correct / mesh_total
+            n_correct += mesh_accuracy
+            print(f"  {obj['nicename']}: {100 * mesh_accuracy:.02f}% ({mesh_correct}/{mesh_total})")
+        else:
+            print(f"  {obj['nicename']}: No ground truth available")
 
     if state.fit_to == "TrainingSet" and n_total > 0:
         frac = n_correct / len(state.objects)
