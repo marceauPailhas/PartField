@@ -76,6 +76,37 @@ fit_methods_list = [
 fit_to_list = ["Annotations", "TrainingSet"]
 
 
+def compute_area_weighted_iou(pred, gt, face_areas):
+    """
+    Compute IoU weighted by face areas instead of face counts.
+
+    Args:
+        pred: Array of predicted labels for faces
+        gt: Array of ground truth labels for faces
+        face_areas: Array of face areas corresponding to each face
+
+    Returns:
+        Area-weighted IoU as percentage
+    """
+    class_ious = []
+
+    for class_id in np.unique(gt):
+        pred_mask = pred == class_id
+        gt_mask = gt == class_id
+
+        intersection_areas = face_areas[np.logical_and(pred_mask, gt_mask)]
+        union_areas = face_areas[np.logical_or(pred_mask, gt_mask)]
+
+        intersection_area = np.sum(intersection_areas)
+        union_area = np.sum(union_areas)
+
+        if union_area > 0:
+            iou = intersection_area / union_area
+            class_ious.append(iou)
+
+    return np.mean(class_ious) if class_ious else 0
+
+
 def load_mesh_and_features(mesh_filepath, ind, require_gt=False, gt_label_fol=""):
     dirpath, filename = os.path.split(mesh_filepath)
     filename_core = filename[9:-6]  # splits off "feat_pca_" ... "_0.ply"
@@ -102,6 +133,9 @@ def load_mesh_and_features(mesh_filepath, ind, require_gt=False, gt_label_fol=""
     V = np.array(tm.vertices, dtype=np.float32)
     F = np.array(tm.faces)
 
+    # Compute face areas using trimesh
+    face_areas = tm.area_faces
+
     # load ground truth, if available
     if have_gt:
         gt_labels = np.loadtxt(gt_filepath)
@@ -120,7 +154,8 @@ def load_mesh_and_features(mesh_filepath, ind, require_gt=False, gt_label_fol=""
         "V": V,
         "F": F,
         "feat_np": feat,
-        # 'feat_pt' : torch.tensor(feat, device='mps' if torch.backends.mps.is_available() else 'cpu'),
+        "face_areas": face_areas,
+        "feat_pt": torch.tensor(feat, device="mps" if torch.backends.mps.is_available() else "cpu"),
         "gt_labels": gt_labels,
     }
 
@@ -152,7 +187,7 @@ def initialize_object_viz(state: State, obj, index=0):
 
 
 def update_prediction(state: State):
-    print("Updating predictions..")
+    print(f"Updating predictions with fit method {state.fit_method}..")
 
     N_anno = state.anno_label.shape[0]
 
@@ -168,11 +203,11 @@ def update_prediction(state: State):
     if state.fit_method == "LinearRegression":
         classifier = OneVsRestClassifier(LinearRegression())
     elif state.fit_method == "LogisticRegression":
-        classifier = OneVsRestClassifier(LogisticRegression(max_iter=1000, random_state=42))
+        classifier = OneVsRestClassifier(LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced"))
     elif state.fit_method == "LinearSVC":
-        classifier = OneVsRestClassifier(LinearSVC(max_iter=2000, random_state=42))
+        classifier = OneVsRestClassifier(LinearSVC(max_iter=2000, random_state=42, class_weight="balanced"))
     elif state.fit_method == "RandomForest":
-        classifier = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+        classifier = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced")
     elif state.fit_method == "NearestNeighbors":
         classifier = OneVsRestClassifier(KNeighborsRegressor(n_neighbors=1))
     elif state.fit_method == "XGBoost":
@@ -192,10 +227,24 @@ def update_prediction(state: State):
 
         state.N_class = np.max(all_train_labels) + 1
 
-        classifier.fit(all_train_feats, all_train_labels)
+        # For XGBoost, calculate sample weights for class balancing
+        if state.fit_method == "XGBoost":
+            from sklearn.utils.class_weight import compute_sample_weight
+
+            sample_weights = compute_sample_weight("balanced", all_train_labels)
+            classifier.fit(all_train_feats, all_train_labels, sample_weight=sample_weights)
+        else:
+            classifier.fit(all_train_feats, all_train_labels)
 
     elif state.fit_to == "Annotations":
-        classifier.fit(state.anno_feat, state.anno_label)
+        # For XGBoost, calculate sample weights for class balancing
+        if state.fit_method == "XGBoost":
+            from sklearn.utils.class_weight import compute_sample_weight
+
+            sample_weights = compute_sample_weight("balanced", state.anno_label)
+            classifier.fit(state.anno_feat, state.anno_label, sample_weight=sample_weights)
+        else:
+            classifier.fit(state.anno_feat, state.anno_label)
     else:
         raise ValueError("unrecognized fit to")
 
@@ -204,6 +253,9 @@ def update_prediction(state: State):
 
     # Print individual mesh accuracies
     print("Individual mesh accuracies:")
+    object_ious = []
+    object_regular_ious = []
+
     for obj in state.objects:
         obj["pred_label"] = classifier.predict(obj["feat_np"])
 
@@ -213,9 +265,41 @@ def update_prediction(state: State):
             mesh_total = obj["gt_labels"].shape[0]
             mesh_accuracy = mesh_correct / mesh_total
             n_correct += mesh_accuracy
-            print(f"  {obj['nicename']}: {100 * mesh_accuracy:.02f}% ({mesh_correct}/{mesh_total})")
+
+            # Compute area-weighted IoU per object
+            pred = obj["pred_label"]
+            gt = obj["gt_labels"]
+            face_areas = obj["face_areas"]
+
+            # Regular IoU (face count based)
+            class_ious_for_obj = []
+            for class_id in np.unique(gt):
+                intersection = np.sum((pred == class_id) & (gt == class_id))
+                union = np.sum((pred == class_id) | (gt == class_id))
+                iou = intersection / union if union > 0 else 0
+                class_ious_for_obj.append(iou)
+
+            regular_iou = np.mean(class_ious_for_obj)
+
+            # Area-weighted IoU
+            area_weighted_iou = compute_area_weighted_iou(pred, gt, face_areas)
+
+            print(
+                f"  {obj['nicename']}: Accuracy: {100 * mesh_accuracy:.02f}% ({mesh_correct}/{mesh_total}), Regular IoU: {100 * regular_iou:.02f}%, Area-weighted IoU: {100 * area_weighted_iou:.02f}%"
+            )
+            object_ious.append(area_weighted_iou)
+            object_regular_ious.append(regular_iou)
         else:
             print(f"  {obj['nicename']}: No ground truth available")
+
+    # Compute average IoU across objects
+    if object_ious:
+        overall_avg_iou = np.mean(object_ious)
+        print(f"Overall Area-weighted IoU: {100 * overall_avg_iou:.02f}%")
+
+    if object_regular_ious:
+        overall_regular_iou = np.mean(object_regular_ious)
+        print(f"Overall Regular IoU: {100 * overall_regular_iou:.02f}%")
 
     if state.fit_to == "TrainingSet" and n_total > 0:
         frac = n_correct / len(state.objects)
@@ -248,6 +332,53 @@ def update_annotation_viz(state: State):
     state.ps_cloud_annotation = ps_cloud
 
     return state
+
+
+def save_predictions_to_obj(state: State):
+    """Save all meshes with predictions as OBJ files with face groups for labels"""
+    if not hasattr(state, "objects") or not state.objects:
+        print("No objects to save")
+        return
+
+    # Create output directory
+    output_dir = "predictions_obj"
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created output directory: {output_dir}")
+
+    for obj in state.objects:
+        if "pred_label" not in obj:
+            print(f"No predictions for {obj['nicename']}, skipping...")
+            continue
+
+        # Create the OBJ file with face groups
+        output_filename = os.path.join(output_dir, f"{obj['nicename']}_predictions.obj")
+
+        with open(output_filename, "w") as f:
+            # Write header
+            f.write(f"# OBJ file with face groups for {obj['nicename']}\n")
+            f.write(f"# Generated with {state.N_class} predicted face labels\n\n")
+
+            # Write all vertices first
+            for v in obj["V"]:
+                f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+            f.write("\n")
+
+            # Write faces grouped by their predicted labels
+            for label_id in range(state.N_class):
+                f.write(f"g label_{label_id}\n")
+
+                # Find faces with this label
+                for face_idx, face in enumerate(obj["F"]):
+                    if obj["pred_label"][face_idx] == label_id:
+                        # OBJ format uses 1-based indexing
+                        f.write(f"f {face[0] + 1} {face[1] + 1} {face[2] + 1}\n")
+
+                f.write("\n")
+
+        print(f"Saved {output_filename} with {state.N_class} face groups")
+
+    print(f"All predictions saved to {output_dir}/ directory")
 
 
 def filter_old_labels(state: State):
@@ -402,6 +533,13 @@ def ps_callback(state_list):
         if changed:
             state = update_annotation_viz(state)
         psim.PopItemWidth()
+
+        psim.TreePop()
+
+    psim.SetNextItemOpen(True, psim.ImGuiCond_FirstUseEver)
+    if psim.TreeNode("Export"):
+        if psim.Button("Save Predictions to OBJ"):
+            save_predictions_to_obj(state)
 
         psim.TreePop()
 

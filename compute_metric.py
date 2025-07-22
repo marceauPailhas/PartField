@@ -4,13 +4,15 @@ from os.path import join
 from typing import List
 import os
 
+
 def compute_iou(pred, gt):
     intersection = np.logical_and(pred, gt).sum()
     union = np.logical_or(pred, gt).sum()
     if union != 0:
-        return (intersection / union) * 100  
+        return (intersection / union) * 100
     else:
         return 0
+
 
 def eval_single_gt_shape(gt_label, pred_masks):
     # gt: [N,], label index
@@ -27,6 +29,7 @@ def eval_single_gt_shape(gt_label, pred_masks):
         best_ious.append(best_iou)
     return np.mean(best_ious)
 
+
 def eval_whole_dataset(pred_folder, merge_parts=False):
     print(pred_folder)
     meta = json.load(open("/home/mikaelaangel/Desktop/data/PartObjaverse-Tiny_semantic.json", "r"))
@@ -42,14 +45,20 @@ def eval_whole_dataset(pred_folder, merge_parts=False):
     for cat in categories:
         results_per_cat[cat] = []
         for shape_id in meta[cat].keys():
-
             try:
                 all_pred_labels = []
                 for num_cluster in range(2, MAX_NUM_CLUSTERS):
                     ### load each label
-                    fname_clustering = os.path.join(pred_folder, "cluster_out", str(shape_id) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2)) + ".npy"
+                    fname_clustering = (
+                        os.path.join(
+                            pred_folder,
+                            "cluster_out",
+                            str(shape_id) + "_" + str(view_id) + "_" + str(num_cluster).zfill(2),
+                        )
+                        + ".npy"
+                    )
                     pred_label = np.load(fname_clustering)
-                    all_pred_labels.append(np.squeeze(pred_label))  
+                    all_pred_labels.append(np.squeeze(pred_label))
 
                 all_pred_labels = np.array(all_pred_labels)
 
@@ -57,7 +66,7 @@ def eval_whole_dataset(pred_folder, merge_parts=False):
                 continue
 
             pred_masks = []
-            
+
             #### Path for PartObjaverseTiny Labels
             gt_labels_path = "PartObjaverse-Tiny_instance_gt"
             #################################
@@ -84,14 +93,13 @@ def eval_whole_dataset(pred_folder, merge_parts=False):
                     miou = eval_single_gt_shape(gt_label, np.array(pred_masks))
                     best_miou = max(best_miou, miou)
                 results_per_cat[cat].append(best_miou)
-            
+
         print(np.mean(results_per_cat[cat]))
         per_cat_mious.append(np.mean(results_per_cat[cat]))
         overall_mious += results_per_cat[cat]
     print(np.mean(per_cat_mious))
     print(np.mean(overall_mious), len(overall_mious))
 
-                
+
 if __name__ == "__main__":
     eval_whole_dataset("dump_partobjtiny_clustering")
-
