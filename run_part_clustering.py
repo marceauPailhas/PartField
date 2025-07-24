@@ -746,7 +746,7 @@ if __name__ == "__main__":
     parser.add_argument("--dump_dir", default="", type=str)
 
     parser.add_argument("--max_num_clusters", default=20, type=int)
-    parser.add_argument("--use_agglo", default=False, type=bool)
+    parser.add_argument("--use_agglo", action="store_true", default=False)
     parser.add_argument("--is_pc", default=False, type=bool)
     parser.add_argument("--option", default=1, type=int)
     parser.add_argument("--with_knn", default=False, type=bool)
@@ -766,7 +766,7 @@ if __name__ == "__main__":
     WITH_KNN = FLAGS.with_knn
 
     EXPORT_MESH = FLAGS.export_mesh
-
+    print("use aglo =", USE_AGGLO)
     models = os.listdir(root)
     os.makedirs(OUTPUT_FOL, exist_ok=True)
 
